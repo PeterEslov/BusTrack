@@ -1,0 +1,14 @@
+## .NET
+bin/
+obj/
+*.user
+.vs/
+
+## Node / frontend
+frontend/node_modules/
+frontend/dist/
+
+## Secrets och lokala miljöfiler
+appsettings.*.local.json
+.env
+.env.local
