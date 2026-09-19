@@ -4,6 +4,9 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Ladda user-secrets oavsett miljö, av samma anledning som i Collector.
+builder.Configuration.AddUserSecrets<Program>();
+
 builder.Services.AddDbContext<BusTrackDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("BusTrackDb")));
 

@@ -20,9 +20,20 @@ public class VehiclesController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetLatestPositions(CancellationToken cancellationToken)
     {
-        var latest = await _db.VehiclePositions
+        // OBS: GroupBy(...).Select(g => g.OrderBy(...).First()) gar INTE att
+        // oversatta till SQL av EF Core (kastar InvalidOperationException:
+        // "could not be translated" vid korning). Losningen ar att forst
+        // hitta senaste tidsstampeln per fordon, och sedan joina tillbaka
+        // for att fa hela raden - det har EF Core stod for.
+        var latestTimestamps = _db.VehiclePositions
             .GroupBy(v => v.VehicleId)
-            .Select(g => g.OrderByDescending(v => v.Timestamp).First())
+            .Select(g => new { VehicleId = g.Key, MaxTimestamp = g.Max(v => v.Timestamp) });
+
+        var latest = await _db.VehiclePositions
+            .Join(latestTimestamps,
+                v => new { v.VehicleId, Timestamp = v.Timestamp },
+                lt => new { lt.VehicleId, Timestamp = lt.MaxTimestamp },
+                (v, lt) => v)
             .ToListAsync(cancellationToken);
 
         return Ok(latest);
