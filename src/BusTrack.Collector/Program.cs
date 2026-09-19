@@ -19,6 +19,15 @@ builder.Services.AddHttpClient<GtfsRealtimeClient>()
         // annars svarar den 406 Not Acceptable.
         AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate
     });
+
+// Steg 2: Collector publicerar nya positioner till Api:et över HTTP, som i sin
+// tur broadcastar dem till webbläsarna via SignalR (se VehicleUpdatePublisher).
+builder.Services.AddHttpClient<VehicleUpdatePublisher>((sp, client) =>
+{
+    var baseUrl = sp.GetRequiredService<IConfiguration>()["Api:BaseUrl"] ?? "https://localhost:63364";
+    client.BaseAddress = new Uri(baseUrl.EndsWith("/") ? baseUrl : baseUrl + "/");
+});
+
 builder.Services.AddHostedService<Worker>();
 
 var host = builder.Build();

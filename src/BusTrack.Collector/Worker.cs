@@ -16,17 +16,20 @@ public class Worker : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly GtfsRealtimeClient _gtfsClient;
     private readonly IConfiguration _configuration;
+    private readonly VehicleUpdatePublisher _publisher;
 
     public Worker(
         ILogger<Worker> logger,
         IServiceScopeFactory scopeFactory,
         GtfsRealtimeClient gtfsClient,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        VehicleUpdatePublisher publisher)
     {
         _logger = logger;
         _scopeFactory = scopeFactory;
         _gtfsClient = gtfsClient;
         _configuration = configuration;
+        _publisher = publisher;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -47,7 +50,7 @@ public class Worker : BackgroundService
                 using var scope = _scopeFactory.CreateScope();
                 var db = scope.ServiceProvider.GetRequiredService<BusTrackDbContext>();
 
-                var savedCount = 0;
+                var updates = new List<VehicleUpdateDto>();
                 foreach (var entity in feed.Entities)
                 {
                     if (entity.Vehicle is null)
@@ -55,7 +58,7 @@ public class Worker : BackgroundService
                         continue;
                     }
 
-                    db.VehiclePositions.Add(new VehiclePosition
+                    var position = new VehiclePosition
                     {
                         VehicleId = entity.Vehicle.Vehicle?.Id ?? entity.Id,
                         TripId = entity.Vehicle.Trip?.TripId,
@@ -64,12 +67,23 @@ public class Worker : BackgroundService
                         Bearing = entity.Vehicle.Position.Bearing,
                         Speed = entity.Vehicle.Position.Speed,
                         Timestamp = DateTimeOffset.FromUnixTimeSeconds((long)entity.Vehicle.Timestamp)
-                    });
-                    savedCount++;
+                    };
+                    db.VehiclePositions.Add(position);
+
+                    updates.Add(new VehicleUpdateDto(
+                        position.VehicleId,
+                        position.TripId,
+                        position.Lat,
+                        position.Lon,
+                        position.Bearing,
+                        position.Speed,
+                        position.Timestamp));
                 }
 
                 await db.SaveChangesAsync(stoppingToken);
-                _logger.LogInformation("Sparade {Count} fordonspositioner", savedCount);
+                _logger.LogInformation("Sparade {Count} fordonspositioner", updates.Count);
+
+                await _publisher.PublishAsync(updates, stoppingToken);
             }
             catch (Exception ex)
             {
